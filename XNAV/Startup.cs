@@ -1,17 +1,18 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Builder;
+﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using XNAV.Data;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using XNAV.Models;
+using XNAV.Schema;
+using HotChocolate;
+using HotChocolate.AspNetCore;
+using HotChocolate.Execution.Configuration;
+using XNAV.Repositories;
 
 namespace XNAV
 {
@@ -27,18 +28,37 @@ namespace XNAV
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            var _dbkey = Configuration["ConnectionString.djangodb"];
+
             services.Configure<CookiePolicyOptions>(options =>
             {
                 // This lambda determines whether user consent for non-essential cookies is needed for a given request.
                 options.CheckConsentNeeded = context => true;
                 options.MinimumSameSitePolicy = SameSiteMode.None;
             });
-
+            services.AddDbContext<XnavContext>(options =>
+                options.UseMySQL(_dbkey));
             services.AddDbContext<ApplicationDbContext>(options =>
-                options.UseSqlServer(
-                    Configuration.GetConnectionString("DefaultConnection")));
+                options.UseMySQL(_dbkey));
             services.AddDefaultIdentity<IdentityUser>()
                 .AddEntityFrameworkStores<ApplicationDbContext>();
+
+
+            services.AddSingleton<EquipmentRepository>();
+            services.AddSingleton<TagRepository>();
+
+            services.AddDataLoaderRegistry();
+
+            services.AddGraphQL(sp => SchemaBuilder.New()
+                .AddServices(sp)
+                .AddQueryType<Query>()
+                .AddType<AvEquipmentType>()
+                .AddType<AvTagsAssociatedGear>()
+                .AddType<AvTags>()
+                .Create(),
+                new QueryExecutionOptions { TracingPreference = TracingPreference.Always });
+
+
 
             services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_1);
         }
@@ -63,6 +83,7 @@ namespace XNAV
 
             app.UseAuthentication();
 
+            app.UseGraphQL();
             app.UseMvc(routes =>
             {
                 routes.MapRoute(
